@@ -34,6 +34,9 @@ type Route struct {
 	err error
 
 	buildVarsFunc BuildVarsFunc
+
+	// middleware slice
+	middleware http.Handler
 }
 
 // Match matches the route against the request.
@@ -52,7 +55,7 @@ func (r *Route) Match(req *http.Request, match *RouteMatch) bool {
 		match.Route = r
 	}
 	if match.Handler == nil {
-		match.Handler = r.handler
+		match.Handler = r
 	}
 	if match.Vars == nil {
 		match.Vars = make(map[string]string)
@@ -592,4 +595,32 @@ func (r *Route) getRegexpGroup() *routeRegexpGroup {
 		}
 	}
 	return r.regexp
+}
+
+func (r *Route) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	fmt.Println("Have middleware:", r.middleware != nil)
+	r.handler.ServeHTTP(w, req)
+	// if len(r.middleware) == 0 {
+	// } else {
+	// 	for m := range r.middleware {
+
+	// 	}
+	// }
+}
+
+type Middleware func(w http.ResponseWriter, req *http.Request, next Middleware)
+
+func (r *Route) middlewareWrapper(m Middleware, next Middleware) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if next == nil {
+			r.handler.ServeHTTP(w, req)
+		} else {
+			m(w, req, next)
+		}
+	})
+}
+
+func (r *Route) Middleware(m Middleware) *Route {
+	r.middleware = r.middlewareWrapper(m, r.middleware)
+	return r
 }
